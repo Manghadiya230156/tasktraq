@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaskTraQ Habit Tracker</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        /* Custom scrollbar for cleaner look */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #bbb; }
+        
+        .animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- ICONS (SVG Helpers) ---
+        const Icon = ({ children, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {children}
+            </svg>
+        );
+        const Activity = ({className}) => <Icon className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></Icon>;
+        const Calendar = ({className}) => <Icon className={className}><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></Icon>;
+        const BarChart2 = ({className}) => <Icon className={className}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></Icon>;
+        const Download = ({className}) => <Icon className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></Icon>;
+        const Upload = ({className}) => <Icon className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></Icon>;
+        const Trash2 = ({className, onClick}) => <svg onClick={onClick} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>;
+        const Plus = ({className}) => <Icon className={className}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></Icon>;
+        const Check = ({className}) => <Icon className={className}><polyline points="20 6 9 17 4 12" /></Icon>;
+
+        // --- CHARTS ---
+        const SimpleLineChart = ({ data }) => {
+            if (!data || data.length === 0) return <div className="h-full flex items-center justify-center text-gray-400">No Data</div>;
+            const height = 150, width = 600, max = 100, min = 0, padding = 20;
+            const points = data.map((val, index) => {
+                const x = (index / (data.length - 1)) * (width - 2 * padding) + padding;
+                const y = height - padding - ((val - min) / (max - min)) * (height - 2 * padding);
+                return `${x},${y}`;
+            }).join(' ');
+
+            return (
+                <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
+                    {[0, 25, 50, 75, 100].map(tick => {
+                        const y = height - padding - ((tick - min) / (max - min)) * (height - 2 * padding);
+                        return <g key={tick}><line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#e5e7eb" strokeWidth="1" /><text x={0} y={y + 3} fontSize="10" fill="#9ca3af">{tick}%</text></g>;
+                    })}
+                    <polyline fill="none" stroke="#6FA8DC" strokeWidth="3" points={points} strokeLinecap="round" strokeLinejoin="round" />
+                    {data.map((val, index) => {
+                        const x = (index / (data.length - 1)) * (width - 2 * padding) + padding;
+                        const y = height - padding - ((val - min) / (max - min)) * (height - 2 * padding);
+                        return <circle key={index} cx={x} cy={y} r="3" fill="#3b82f6" className="hover:r-5 transition-all" />;
+                    })}
+                </svg>
+            );
+        };
+
+        const SimpleDonutChart = ({ completed, left }) => {
+            const total = completed + left;
+            const percentage = total === 0 ? 0 : (completed / total) * 100;
+            const radius = 40;
+            const circumference = 2 * Math.PI * radius;
+            const strokeDashoffset = circumference - (percentage / 100) * circumference;
+
+            return (
+                <div className="flex items-center justify-center relative">
+                    <svg width="120" height="120" className="transform -rotate-90">
+                        <circle cx="60" cy="60" r={radius} stroke="#e5e7eb" strokeWidth="20" fill="transparent" />
+                        <circle cx="60" cy="60" r={radius} stroke="#6FA8DC" strokeWidth="20" fill="transparent" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" />
+                    </svg>
+                    <div className="absolute text-center">
+                        <span className="text-xl font-bold text-gray-700">{Math.round(percentage)}%</span>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MAIN APP ---
+        const TaskTraQ = () => {
+            const [activeTab, setActiveTab] = useState('tracker');
+            const [currentMonth, setCurrentMonth] = useState('January');
+            const [currentYear, setCurrentYear] = useState(2025);
+            const fileInputRef = useRef(null);
+
+            const defaultHabits = [
+                { id: 1, name: "Running", goal: 30, completed: {} },
+                { id: 2, name: "Meditation", goal: 30, completed: {} },
+                { id: 3, name: "Bath", goal: 30, completed: {} },
+                { id: 4, name: "Drink 3L of water", goal: 30, completed: {} },
+                { id: 5, name: "50 pushups", goal: 15, completed: {} },
+                { id: 6, name: "Jawline Exercise", goal: 15, completed: {} },
+                { id: 7, name: "Stretching", goal: 20, completed: {} },
+                { id: 8, name: "Nightcare Routine", goal: 30, completed: {} },
+                { id: 9, name: "Sleep early", goal: 25, completed: {} },
+                { id: 10, name: "Abs workout", goal: 25, completed: {} },
+                { id: 11, name: "Typing practice", goal: 30, completed: {} },
+                { id: 12, name: "Journal", goal: 30, completed: {} },
+            ];
+
+            const [habits, setHabits] = useState(() => {
+                const saved = localStorage.getItem('tasktraq_habits');
+                return saved ? JSON.parse(saved) : defaultHabits;
+            });
+
+            useEffect(() => {
+                localStorage.setItem('tasktraq_habits', JSON.stringify(habits));
+            }, [habits]);
+
+            const daysInMonth = 31;
+            const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+            const weeks = [
+                { label: 'WEEK 1', start: 1, end: 7, span: 7 },
+                { label: 'WEEK 2', start: 8, end: 14, span: 7 },
+                { label: 'WEEK 3', start: 15, end: 21, span: 7 },
+                { label: 'WEEK 4', start: 22, end: 28, span: 7 },
+                { label: 'WEEK 5', start: 29, end: 31, span: 3 },
+            ];
+
+            const toggleHabit = (habitId, day) => {
+                setHabits(prevHabits => 
+                    prevHabits.map(habit => {
+                        if (habit.id === habitId) {
+                            const newCompleted = { ...habit.completed };
+                            if (newCompleted[day]) delete newCompleted[day];
+                            else newCompleted[day] = true;
+                            return { ...habit, completed: newCompleted };
+                        }
+                        return habit;
+                    })
+                );
+            };
+
+            const addHabit = () => {
+                const name = prompt("Enter new habit name:");
+                if (name) {
+                    setHabits([...habits, { id: Date.now(), name: name, goal: 30, completed: {} }]);
+                }
+            };
+
+            const deleteHabit = (id) => {
+                if (confirm("Are you sure you want to delete this habit?")) {
+                    setHabits(habits.filter(h => h.id !== id));
+                }
+            };
+
+            const updateGoal = (id, newGoal) => {
+                setHabits(habits.map(h => h.id === id ? { ...h, goal: parseInt(newGoal) || 0 } : h));
+            };
+
+            // Enhanced CSV Export (JSON backup embedded)
+            const exportToCSV = () => {
+                // We will create a JSON file instead of CSV for better data backup
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(habits));
+                const link = document.createElement("a");
+                link.setAttribute("href", dataStr);
+                link.setAttribute("download", "tasktraq_backup.json");
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            };
+
+            // Load Backup
+            const triggerFileInput = () => fileInputRef.current.click();
+            
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        if (Array.isArray(importedData)) {
+                            setHabits(importedData);
+                            alert("Data restored successfully!");
+                        } else {
+                            alert("Invalid backup file.");
+                        }
+                    } catch (error) {
+                        alert("Error reading file.");
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            const stats = useMemo(() => {
+                let totalCompleted = 0, totalGoal = 0;
+                const dailyCompletion = Array(daysInMonth).fill(0);
+                habits.forEach(habit => {
+                    totalCompleted += Object.keys(habit.completed).length;
+                    totalGoal += habit.goal;
+                    Object.keys(habit.completed).forEach(day => {
+                        const idx = parseInt(day) - 1;
+                        if (idx >= 0 && idx < daysInMonth) dailyCompletion[idx]++;
+                    });
+                });
+                const topHabits = [...habits].sort((a, b) => Object.keys(b.completed).length - Object.keys(a.completed).length).slice(0, 10);
+                return {
+                    totalCompleted, totalGoal, totalLeft: Math.max(0, totalGoal - totalCompleted),
+                    globalProgress: totalGoal === 0 ? 0 : Math.round((totalCompleted / totalGoal) * 100),
+                    dailyPercentages: dailyCompletion.map(c => habits.length > 0 ? (c / habits.length) * 100 : 0),
+                    topHabits
+                };
+            }, [habits]);
+
+            const gridStyle = {
+                display: 'grid',
+                gridTemplateColumns: `200px 60px repeat(${daysInMonth}, 30px) 60px 60px 60px 100px`
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
+                    {/* Hidden Input for loading backup */}
+                    <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{display:'none'}} accept=".json" />
+
+                    <div className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between h-16">
+                                <div className="flex items-center">
+                                    <div className="flex-shrink-0 flex items-center gap-2">
+                                        <Activity className="h-8 w-8 text-blue-500" />
+                                        <span className="font-bold text-xl tracking-tight text-gray-900">TaskTraQ</span>
+                                    </div>
+                                    <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+                                        <button onClick={() => setActiveTab('tracker')} className={`${activeTab === 'tracker' ? 'border-blue-500 text-gray-900' : 'border-transparent text-gray-500'} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors`}>
+                                            <Calendar className="w-4 h-4 mr-2"/> Daily Grid
+                                        </button>
+                                        <button onClick={() => setActiveTab('dashboard')} className={`${activeTab === 'dashboard' ? 'border-blue-500 text-gray-900' : 'border-transparent text-gray-500'} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors`}>
+                                            <BarChart2 className="w-4 h-4 mr-2"/> Dashboard
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <div className="bg-blue-50 px-3 py-1 rounded text-sm font-semibold text-blue-700 border border-blue-200 hidden sm:block">{currentMonth} {currentYear}</div>
+                                    
+                                    <button onClick={triggerFileInput} className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-600 bg-white hover:bg-gray-50">
+                                        <Upload className="w-4 h-4 sm:mr-2"/> <span className="hidden sm:inline">Load</span>
+                                    </button>
+                                    
+                                    <button onClick={exportToCSV} className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                        <Download className="w-4 h-4 sm:mr-2"/> <span className="hidden sm:inline">Save</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <main className="max-w-full mx-auto py-6 sm:px-6 lg:px-8">
+                        {activeTab === 'tracker' && (
+                            <div className="bg-white shadow rounded-lg overflow-hidden border border-gray-200">
+                                <div className="overflow-x-auto">
+                                    <div className="min-w-max">
+                                        {/* HEADER */}
+                                        <div className="bg-[#CFE2F3] border-b border-gray-200 text-xs font-bold text-gray-700">
+                                            <div style={gridStyle} className="border-b border-white/50">
+                                                <div className="col-span-2 p-1 border-r border-white/30"></div>
+                                                {weeks.map((week, i) => (
+                                                    <div key={i} className="p-1 flex items-center justify-center border-r border-white/30 text-[10px] text-gray-500 uppercase tracking-wider" style={{ gridColumn: `span ${week.span}` }}>
+                                                        {week.label}
+                                                    </div>
+                                                ))}
+                                                <div className="col-span-4 p-1"></div>
+                                            </div>
+                                            <div style={gridStyle}>
+                                                <div className="p-3 flex items-center justify-center border-r border-white/30">DAILY HABITS</div>
+                                                <div className="p-3 flex items-center justify-center border-r border-white/30">GOAL</div>
+                                                {daysArray.map(day => <div key={day} className="p-1 flex items-center justify-center border-r border-white/30">{day}</div>)}
+                                                <div className="p-2 flex items-center justify-center border-r border-white/30">DONE</div>
+                                                <div className="p-2 flex items-center justify-center border-r border-white/30">LEFT</div>
+                                                <div className="p-2 flex items-center justify-center border-r border-white/30">%</div>
+                                                <div className="p-2 flex items-center justify-center">PROGRESS</div>
+                                            </div>
+                                        </div>
+
+                                        {/* BODY */}
+                                        {habits.map((habit, index) => {
+                                            const completedCount = Object.keys(habit.completed).length;
+                                            const left = Math.max(0, habit.goal - completedCount);
+                                            const percent = habit.goal > 0 ? Math.round((completedCount / habit.goal) * 100) : 0;
+
+                                            return (
+                                                <div key={habit.id} style={gridStyle} className={`border-b border-gray-100 text-sm hover:bg-blue-50/30 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                                                    <div className="p-2 flex items-center justify-between border-r border-gray-100 font-medium text-gray-700 pl-4 group">
+                                                        <span className="truncate">{habit.name}</span>
+                                                        <button onClick={() => deleteHabit(habit.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4" /></button>
+                                                    </div>
+                                                    <div className="border-r border-gray-100 bg-white">
+                                                        <input type="number" value={habit.goal} onChange={(e) => updateGoal(habit.id, e.target.value)} className="w-full h-full text-center focus:outline-none focus:bg-blue-50 text-gray-600 text-xs" />
+                                                    </div>
+                                                    {daysArray.map(day => (
+                                                        <div key={day} className="flex items-center justify-center border-r border-gray-100 relative">
+                                                            <label className="cursor-pointer w-full h-full flex items-center justify-center">
+                                                                <input type="checkbox" checked={!!habit.completed[day]} onChange={() => toggleHabit(habit.id, day)} className="hidden" />
+                                                                <div className={`w-5 h-5 border rounded-sm flex items-center justify-center transition-all ${habit.completed[day] ? 'bg-green-100 border-green-500' : 'bg-white border-gray-200 hover:border-gray-400'}`}>
+                                                                    {habit.completed[day] && <Check className="w-3.5 h-3.5 text-green-600" />}
+                                                                </div>
+                                                            </label>
+                                                        </div>
+                                                    ))}
+                                                    <div className="flex items-center justify-center border-r border-gray-100 font-semibold text-gray-600 bg-gray-50">{completedCount}</div>
+                                                    <div className="flex items-center justify-center border-r border-gray-100 text-gray-500">{left}</div>
+                                                    <div className="flex items-center justify-center border-r border-gray-100 text-gray-600 text-xs">{percent}%</div>
+                                                    <div className="p-2 flex items-center justify-center">
+                                                        <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
+                                                            <div className="bg-[#6FA8DC] h-full transition-all duration-500 ease-out" style={{ width: `${Math.min(100, percent)}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        <div className="p-3 border-t border-gray-200 bg-gray-50">
+                                            <button onClick={addHabit} className="flex items-center text-blue-600 hover:text-blue-800 font-medium text-sm transition-colors">
+                                                <Plus className="w-4 h-4 mr-1" /> Add New Habit
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'dashboard' && (
+                            <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                    <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow border border-gray-200">
+                                        <h3 className="text-lg font-bold text-gray-700 mb-2 uppercase tracking-wide border-b border-gray-100 pb-2">Consistency Trend</h3>
+                                        <div className="h-64 mt-4"><SimpleLineChart data={stats.dailyPercentages} /></div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-lg shadow border border-gray-200 flex flex-col items-center">
+                                        <h3 className="text-lg font-bold text-gray-700 mb-6 uppercase tracking-wide w-full text-center border-b border-gray-100 pb-2">Overview</h3>
+                                        <SimpleDonutChart completed={stats.totalCompleted} left={stats.totalLeft} />
+                                        <div className="mt-6 w-full flex justify-between text-sm text-gray-600 px-4">
+                                            <div className="flex flex-col items-center"><span className="font-bold text-xl">{stats.totalLeft}</span><span className="text-gray-400 text-xs">LEFT</span></div>
+                                            <div className="h-8 w-px bg-gray-200"></div>
+                                            <div className="flex flex-col items-center"><span className="font-bold text-xl text-blue-600">{stats.totalCompleted}</span><span className="text-gray-400 text-xs">DONE</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
+                                        <h3 className="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wide border-b border-gray-100 pb-2">Stats</h3>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="p-4 bg-blue-50 rounded border border-blue-100"><div className="text-blue-500 text-xs font-bold uppercase">Total Habits</div><div className="text-2xl font-bold">{habits.length}</div></div>
+                                            <div className="p-4 bg-green-50 rounded border border-green-100"><div className="text-green-600 text-xs font-bold uppercase">Completion</div><div className="text-2xl font-bold">{stats.globalProgress}%</div></div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
+                                        <h3 className="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wide border-b border-gray-100 pb-2">Top Habits</h3>
+                                        <table className="min-w-full">
+                                            <tbody className="divide-y divide-gray-100">
+                                                {stats.topHabits.map((h, i) => (
+                                                    <tr key={h.id}>
+                                                        <td className="py-2 text-sm text-gray-500 w-6">{i + 1}</td>
+                                                        <td className="py-2 text-sm font-medium text-gray-700">{h.name}</td>
+                                                        <td className="py-2 text-right"><span className="text-xs text-gray-500">{Math.round((Object.keys(h.completed).length / h.goal) * 100) || 0}%</span></td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<TaskTraQ />);
+    </script>
+</body>
+</html>
