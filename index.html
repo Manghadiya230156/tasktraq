@@ -11,7 +11,13 @@
     
     <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Firebase COMPAT SDK (required for plain HTML) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
     
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -32,6 +38,26 @@
     <div id="root"></div>
 
     <script type="text/babel">
+        // 🔥 Firebase init (COMPAT)
+    const firebaseConfig = {
+        apiKey: "AIzaSyCPp3SYLn2wELLWBhIitkMb5i_tNiN5qUU",
+        authDomain: "tasktraq-5258f.firebaseapp.com",
+        projectId: "tasktraq-5258f",
+        storageBucket: "tasktraq-5258f.appspot.com",
+        messagingSenderId: "949065647226",
+        appId: "1:949065647226:web:45f5c1c9ccc78775dce7c3"
+    };
+
+
+firebase.initializeApp(firebaseConfig);
+
+const auth = firebase.auth();
+const db = firebase.firestore();
+const signInWithGoogle = async () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await auth.signInWithPopup(provider);
+    };
+
         const { useState, useEffect, useMemo, useRef } = React;
 
         // --- ICONS (SVG Helpers) ---
@@ -251,6 +277,13 @@
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
+                                    <button
+                                    onClick={signInWithGoogle}
+                                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                                    >
+                                    Login
+                                    </button>
+
                                     <div className="bg-blue-50 px-3 py-1 rounded text-sm font-semibold text-blue-700 border border-blue-200 hidden sm:block">{currentMonth} {currentYear}</div>
                                     
                                     <button onClick={triggerFileInput} className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-600 bg-white hover:bg-gray-50">
