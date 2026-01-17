@@ -52,14 +52,26 @@
 firebase.initializeApp(firebaseConfig);
 
 const auth = firebase.auth();
+let currentUser = null;
+
+auth.onAuthStateChanged((user) => {
+    if (user) {
+        currentUser = user;
+        console.log("User logged in:", user.email);
+    } else {
+        currentUser = null;
+        console.log("User logged out");
+    }
+});
+
 auth.getRedirectResult()
     .then((result) => {
         if (result.user) {
-            console.log("Login success:", result.user.email);
+            console.log("Redirect login success:", result.user.email);
         }
     })
     .catch((error) => {
-        console.error("Auth error:", error);
+        console.error("Redirect error:", error.message);
     });
 
 const db = firebase.firestore();
@@ -135,6 +147,8 @@ window.signInWithGoogle = () => {
 
         // --- MAIN APP ---
         const TaskTraQ = () => {
+            const [user, setUser] = useState(null);
+
             const [activeTab, setActiveTab] = useState('tracker');
             const [currentMonth, setCurrentMonth] = useState('January');
             const [currentYear, setCurrentYear] = useState(2025);
@@ -163,6 +177,15 @@ window.signInWithGoogle = () => {
             useEffect(() => {
                 localStorage.setItem('tasktraq_habits', JSON.stringify(habits));
             }, [habits]);
+            useEffect(() => {
+            const unsubscribe = auth.onAuthStateChanged((u) => {
+                setUser(u);
+                console.log("Auth state changed:", u?.email);
+            });
+
+            return () => unsubscribe();
+        }, []);
+
 
             const daysInMonth = 31;
             const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
@@ -289,12 +312,19 @@ window.signInWithGoogle = () => {
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
+                                    {user ? (
+                                    <div className="text-sm font-semibold text-green-600">
+                                        {user.displayName}
+                                    </div>
+                                ) : (
                                     <button
-                                    onClick={signInWithGoogle}
-                                    className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                        onClick={signInWithGoogle}
+                                        className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                                     >
-                                    Login
+                                        Login
                                     </button>
+                                )}
+
 
 
 
